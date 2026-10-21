@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive seminar tool for LUBS5302M: step through k-means and hierarchical clustering.">
+<title>Clustering Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gelasio:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: red module band, shared data toolbar, four numbered stages; each stage = plot on the left, controls on the right (stacks on phones). */
+:root{
+  --bg:#ffffff; --panel:#f6f4f3; --line:#e2dcda; --ink:#222222; --muted:#5f5856;
+  --accent:#ff4e36; --accent-ink:#b52418; --accent-soft:#fff0ed; --on-accent:#ffffff; --deep:#910000;
+  --k1:#0b3d5c; --k2:#d98b0b; --k3:#2a9d8f; --k4:#8e5bb5; --k5:#6b8e23; --k6:#c2185b; --none:#b9b2b0;
+  --good:#2f7d4f; --bad:#b52418;
+  --f-display:"Gelasio", Georgia, "Times New Roman", serif;
+  --f-body:"Source Sans 3", "Segoe UI", Arial, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#161413; --panel:#211e1d; --line:#3a3533; --ink:#efeae8; --muted:#b5aca9;
+  --accent:#ff6a55; --accent-ink:#ff8a78; --accent-soft:#3a2420; --on-accent:#1a0f0d; --deep:#b31f1f;
+  --k1:#6fb3e0; --k2:#f2b24a; --k3:#4fc4b5; --k4:#b896d9; --k5:#a3c45a; --k6:#ef6aa0; --none:#5c5553;
+  --good:#6cc28f; --bad:#ff8a78; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161413; --panel:#211e1d; --line:#3a3533; --ink:#efeae8; --muted:#b5aca9;
+  --accent:#ff6a55; --accent-ink:#ff8a78; --accent-soft:#3a2420; --on-accent:#1a0f0d; --deep:#b31f1f;
+  --k1:#6fb3e0; --k2:#f2b24a; --k3:#4fc4b5; --k4:#b896d9; --k5:#a3c45a; --k6:#ef6aa0; --none:#5c5553;
+  --good:#6cc28f; --bad:#ff8a78; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+@media (max-width:600px){.band svg.arcs{display:none}.privacy{margin-left:0}}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.2}
+a{color:var(--accent-ink)}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* Band */
+.band{background:#ff4e36;color:#fff;position:relative;overflow:hidden}
+.band .wrap{padding-block:22px 26px;position:relative;z-index:1}
+.band .module{font-size:.82rem;letter-spacing:.06em;text-transform:uppercase;opacity:.95}
+.band h1{font-size:clamp(2rem,4.5vw,2.9rem);margin-top:6px;color:#fff}
+.band p{margin:8px 0 0;max-width:62ch;font-size:1.02rem}
+.band .dash{display:block;width:34px;height:4px;background:#fff;margin-top:14px}
+.band svg.arcs{position:absolute;right:-40px;top:-30px;height:150%;width:auto;z-index:0;opacity:.95}
+
+/* Toolbar */
+.toolbar{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;padding-block:16px;border-bottom:1px solid var(--line)}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label,.lbl{font-size:.75rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px;max-width:100%}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:.95rem}
+.switch input{width:18px;height:18px;accent-color:var(--accent)}
+.privacy{margin-left:auto;font-size:.85rem;color:var(--muted);max-width:34ch}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-top:18px;border-bottom:2px solid var(--line)}
+.tab{background:none;border:0;padding:10px 14px;cursor:pointer;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;display:flex;gap:8px;align-items:baseline}
+.tab .n{font-family:var(--f-mono);font-size:.8rem}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--ink)}
+
+.stage{padding-block:22px 40px}
+.stage-head{display:flex;flex-wrap:wrap;gap:6px 24px;align-items:baseline;margin-bottom:16px}
+.stage-head h2{font-size:1.6rem}
+.stage-head p{margin:0;color:var(--muted);max-width:70ch}
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.plotbox{background:var(--panel);border-radius:10px;padding:10px;min-width:0}
+.plotbox svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.85rem;color:var(--muted);padding:6px 6px 2px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:11px;height:11px;border-radius:50%;display:inline-block}
+
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--bg)}
+.card h3{font-size:1.05rem;margin-bottom:8px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:8px 13px;cursor:pointer;font-weight:600}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(.95)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.stepper button{border:0;background:var(--panel);width:34px;height:34px;cursor:pointer;font-size:1.1rem}
+.stepper output{min-width:38px;text-align:center;font-family:var(--f-mono);font-weight:600}
+
+.status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{background:var(--panel);border-radius:8px;padding:8px 10px;min-width:0}
+.stat .v{font-family:var(--f-mono);font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.stat .k{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pill{display:inline-block;font-size:.78rem;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink)}
+.pill.done{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.narr{background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:.95rem;min-height:3.2em}
+.note{font-size:.88rem;color:var(--muted);margin:6px 0 0}
+table.prof{width:100%;border-collapse:collapse;font-size:.88rem;font-variant-numeric:tabular-nums}
+table.prof th,table.prof td{padding:5px 6px;text-align:right;border-bottom:1px solid var(--line)}
+table.prof th:first-child,table.prof td:first-child{text-align:left}
+table.prof th{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tablewrap{overflow-x:auto}
+
+.tasks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.tasks li{display:flex;gap:10px;align-items:flex-start;font-size:.95rem}
+.tasks input{margin-top:4px;width:17px;height:17px;accent-color:var(--accent);flex:none}
+
+/* Quiz */
+.quiz{display:flex;flex-direction:column;gap:16px;max-width:820px}
+.q{border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.q h3{font-family:var(--f-body);font-size:1.02rem;font-weight:700;margin-bottom:10px}
+.q .opts{display:flex;flex-direction:column;gap:6px}
+.q .opt{text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:8px 11px;cursor:pointer}
+.q .opt:hover{border-color:var(--ink)}
+.q .opt.right{border-color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)}
+.q .opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.q .fb{margin-top:8px;font-size:.93rem}
+.score{font-family:var(--f-mono);font-weight:600}
+
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+footer .wrap{padding-block:16px 28px}
+
+/* SVG text */
+svg text{font-family:var(--f-body);fill:var(--muted)}
+svg .axis line,svg .axis path{stroke:var(--line)}
+svg .grid line{stroke:var(--line);stroke-width:1}
+svg .axlabel{font-size:13px;fill:var(--ink)}
+svg .tick{font-size:11px;font-family:var(--f-mono)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<style>body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+
+
+<header class="band">
+  <svg class="arcs" viewBox="0 0 300 300" aria-hidden="true">
+    <circle cx="150" cy="170" r="125" fill="#910000"/>
+    <rect x="25" y="20" width="80" height="300" fill="#ff4e36"/>
+    <ellipse cx="225" cy="160" rx="40" ry="140" fill="#910000"/>
+    <ellipse cx="236" cy="160" rx="18" ry="90" fill="#ff4e36"/>
+  </svg>
+  <div class="wrap">
+    <div class="module">LUBS5302M Foundations of Machine Learning in Business · Seminar 3</div>
+    <h1>Clustering Lab</h1>
+    <p>Watch k-means and hierarchical clustering work step by step, on the lecture's customers, Spanish banks, or points you draw yourself.</p>
+    <span class="dash"></span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="toolbar">
+    <div class="field">
+      <label for="dataset">Data set</label>
+      <select id="dataset"></select>
+    </div>
+    <label class="switch" for="standardise"><input type="checkbox" id="standardise"> Standardise the variables (z-scores)</label>
+    <label class="switch" for="reveal" id="revealWrap" hidden><input type="checkbox" id="reveal"> Reveal which banks failed</label>
+    <p class="privacy">Everything runs in your browser. Nothing you do here is uploaded or submitted.</p>
+  </div>
+  <p class="note" id="dsNote"></p>
+
+  <nav class="tabs" role="tablist" aria-label="Stages">
+    <button class="tab" role="tab" id="tab-km" aria-controls="p-km" aria-selected="true"><span class="n">1</span>k-means</button>
+    <button class="tab" role="tab" id="tab-elbow" aria-controls="p-elbow" aria-selected="false"><span class="n">2</span>Choosing K</button>
+    <button class="tab" role="tab" id="tab-hc" aria-controls="p-hc" aria-selected="false"><span class="n">3</span>Hierarchical</button>
+    <button class="tab" role="tab" id="tab-quiz" aria-controls="p-quiz" aria-selected="false"><span class="n">4</span>Test yourself</button>
+  </nav>
+
+  <!-- ============ Stage 1: k-means ============ -->
+  <section class="stage" id="p-km" role="tabpanel" aria-labelledby="tab-km">
+    <div class="stage-head">
+      <h2>k-means, one step at a time</h2>
+      <p>Pick K, drop the starting centres, then alternate between assigning points and moving centres until nothing changes.</p>
+    </div>
+    <div class="grid">
+      <div class="plotbox">
+        <svg id="kmPlot" viewBox="0 0 640 440" role="img" aria-label="Scatter plot of the data with k-means clusters"></svg>
+        <div class="legend" id="kmLegend"></div>
+      </div>
+      <div class="side">
+        <div class="card">
+          <h3>Set up</h3>
+          <div class="row" style="justify-content:space-between">
+            <div class="row"><span class="lbl">Clusters, K</span>
+              <div class="stepper"><button id="kDown" aria-label="Fewer clusters">−</button><output id="kVal">3</output><button id="kUp" aria-label="More clusters">+</button></div>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="kmRandom">Random centres</button>
+            <button class="btn" id="kmPlace" aria-pressed="false">Place centres by clicking</button>
+          </div>
+          <p class="note" id="addHint" hidden>Your own data: click anywhere on the plot to add a point (when you are not placing centres). <button class="btn" id="clearPts" style="padding:3px 9px;margin-left:4px">Clear points</button></p>
+        </div>
+        <div class="card">
+          <h3>Run</h3>
+          <div class="row">
+            <button class="btn primary" id="kmStep">Next step</button>
+            <button class="btn" id="kmRun">Run to the end</button>
+            <button class="btn" id="kmReset">Reset</button>
+          </div>
+          <label class="switch" style="margin-top:10px" for="kmLines"><input type="checkbox" id="kmLines" checked> Show lines from points to their centre</label>
+        </div>
+        <div class="card">
+          <div class="status">
+            <div class="stat"><div class="k">Stage</div><div class="v" style="font-size:1rem"><span class="pill" id="kmPhase">Ready</span></div></div>
+            <div class="stat"><div class="k">Iteration</div><div class="v" id="kmIter">0</div></div>
+            <div class="stat"><div class="k">Within-cluster variation</div><div class="v" id="kmW">–</div></div>
+          </div>
+          <svg id="kmHist" viewBox="0 0 320 90" style="width:100%;height:auto;margin-top:10px" role="img" aria-label="Within-cluster variation at each step"></svg>
+          <div class="narr" id="kmNarr" aria-live="polite"></div>
+        </div>
+        <div class="card" id="kmProfCard" hidden>
+          <h3>Cluster profiles</h3>
+          <div class="tablewrap"><table class="prof" id="kmProf"></table></div>
+        </div>
+        <div class="card">
+          <h3>Try this</h3>
+          <ul class="tasks" data-group="km">
+            <li><input type="checkbox" id="t-km1"><label for="t-km1">Run k-means on the lecture customers with K = 3. Does it find the three groups from Figure 2?</label></li>
+            <li><input type="checkbox" id="t-km2"><label for="t-km2">Press Reset and Random centres a few times. Do you always end with the same clusters and the same variation?</label></li>
+            <li><input type="checkbox" id="t-km3"><label for="t-km3">Place all three centres yourself in one corner. How many iterations does it take now?</label></li>
+            <li><input type="checkbox" id="t-km4"><label for="t-km4">Switch to Two crescents. Can k-means find the two shapes? Why not?</label></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Stage 2: elbow ============ -->
+  <section class="stage" id="p-elbow" role="tabpanel" aria-labelledby="tab-elbow" hidden>
+    <div class="stage-head">
+      <h2>How many clusters?</h2>
+      <p>For each K from 1 to 8, k-means runs 20 times from random starts and keeps the best result. Look for the elbow, then click a point to see that solution.</p>
+    </div>
+    <div class="grid">
+      <div class="plotbox">
+        <svg id="elbowPlot" viewBox="0 0 640 400" role="img" aria-label="Elbow plot of within-cluster variation against K"></svg>
+      </div>
+      <div class="side">
+        <div class="card">
+          <h3 id="elbowTitle">Best solution for K = 3</h3>
+          <svg id="elbowMini" viewBox="0 0 640 440" role="img" aria-label="Clusters for the selected K"></svg>
+          <div class="row" style="margin-top:8px"><button class="btn" id="elbowOpen">Open this solution in stage 1</button></div>
+        </div>
+        <div class="card">
+          <h3>Values</h3>
+          <div class="tablewrap"><table class="prof" id="elbowTable"></table></div>
+          <p class="note">More clusters always lower the variation. With one cluster per point it would be zero. The elbow is where extra clusters stop paying off.</p>
+        </div>
+        <div class="card">
+          <h3>Try this</h3>
+          <ul class="tasks" data-group="elbow">
+            <li><input type="checkbox" id="t-e1"><label for="t-e1">Where is the elbow for the lecture customers? For Three groups?</label></li>
+            <li><input type="checkbox" id="t-e2"><label for="t-e2">Look at Spanish banks (all 66). Is the elbow clear? What would you tell a manager?</label></li>
+            <li><input type="checkbox" id="t-e3"><label for="t-e3">Turn standardising off for the banks. Why does the curve change so much?</label></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Stage 3: hierarchical ============ -->
+  <section class="stage" id="p-hc" role="tabpanel" aria-labelledby="tab-hc" hidden>
+    <div class="stage-head">
+      <h2>Hierarchical clustering, merge by merge</h2>
+      <p>Every point starts alone. Each step joins the two closest clusters and adds a bar to the dendrogram at the height of their distance.</p>
+    </div>
+    <div class="grid">
+      <div class="plotbox">
+        <svg id="hcPlot" viewBox="0 0 640 440" role="img" aria-label="Scatter plot coloured by hierarchical clusters"></svg>
+        <svg id="hcDendro" viewBox="0 0 640 300" role="img" aria-label="Dendrogram" style="margin-top:8px"></svg>
+      </div>
+      <div class="side">
+        <div class="card">
+          <h3>Linkage</h3>
+          <div class="field">
+            <label for="linkage">How close are two clusters?</label>
+            <select id="linkage">
+              <option value="complete">Complete: furthest members</option>
+              <option value="single">Single: closest members</option>
+              <option value="average">Average: average of all pairs</option>
+              <option value="ward">Ward: smallest rise in variation</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Build the tree</h3>
+          <div class="row">
+            <button class="btn" id="hcBack">Back</button>
+            <button class="btn primary" id="hcNext">Next merge</button>
+            <button class="btn" id="hcAll">Build all</button>
+            <button class="btn" id="hcReset">Reset</button>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <span class="lbl">Cut the tree into</span>
+            <div class="stepper"><button id="cutDown" aria-label="Fewer clusters">−</button><output id="cutVal">3</output><button id="cutUp" aria-label="More clusters">+</button></div>
+            <span class="lbl">clusters</span>
+          </div>
+          <label class="switch" style="margin-top:10px" for="ghost"><input type="checkbox" id="ghost"> Show the rest of the tree faintly</label>
+        </div>
+        <div class="card">
+          <div class="status">
+            <div class="stat"><div class="k">Merges done</div><div class="v" id="hcMerges">0</div></div>
+            <div class="stat"><div class="k">Clusters now</div><div class="v" id="hcClusters">–</div></div>
+            <div class="stat"><div class="k">Last merge height</div><div class="v" id="hcHeight">–</div></div>
+          </div>
+          <div class="narr" id="hcNarr" style="margin-top:10px" aria-live="polite"></div>
+        </div>
+        <div class="card" id="hcProfCard" hidden>
+          <h3>Cluster profiles</h3>
+          <div class="tablewrap"><table class="prof" id="hcProf"></table></div>
+        </div>
+        <div class="card">
+          <h3>Try this</h3>
+          <ul class="tasks" data-group="hc">
+            <li><input type="checkbox" id="t-h1"><label for="t-h1">Step through the first five merges for the lecture customers. Which customers join first, and why?</label></li>
+            <li><input type="checkbox" id="t-h2"><label for="t-h2">Cut the finished tree into 3 clusters. Is it the same answer k-means gave?</label></li>
+            <li><input type="checkbox" id="t-h3"><label for="t-h3">On Two crescents, compare Single and Complete linkage. Which one finds the shapes?</label></li>
+            <li><input type="checkbox" id="t-h4"><label for="t-h4">On Spanish banks (62), cut into 3 and reveal the failures. Which cluster would a regulator watch?</label></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Stage 4: quiz ============ -->
+  <section class="stage" id="p-quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+    <div class="stage-head">
+      <h2>Test yourself</h2>
+      <p>Seven quick questions. Pick an answer to see whether it is right and why. Score: <span class="score" id="quizScore">0 / 7</span></p>
+    </div>
+    <div class="quiz" id="quiz"></div>
+    <div class="row" style="margin-top:16px"><button class="btn" id="quizReset">Start again</button></div>
+  </section>
+</main>
+
+<footer><div class="wrap">Leeds University Business School · LUBS5302M Foundations of Machine Learning in Business. Spanish bank data: Serrano-Cinca (1997), analysed in Mar-Molinero and Serrano-Cinca (2001), <i>European Journal of Finance</i> 7(2).</div></footer>
+
+<script>
+(function(){
+"use strict";
+// ---------------------------------------------------------------- utilities
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+const $=id=>document.getElementById(id);
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
+function fmt(v){if(!isFinite(v))return"–";if(v===0)return"0";const a=Math.abs(v);return a>=1000?v.toLocaleString("en-GB",{maximumFractionDigits:0}):a>=100?v.toFixed(0):a>=10?v.toFixed(1):v.toFixed(2)}
+function niceTicks(min,max,n){const span=max-min||1;let step=Math.pow(10,Math.floor(Math.log10(span/n)));const err=span/n/step;if(err>=7.5)step*=10;else if(err>=3.5)step*=5;else if(err>=1.5)step*=2;const t=[];for(let v=Math.ceil(min/step)*step;v<=max+1e-9;v+=step)t.push(+v.toFixed(10));return t}
+const CL=["var(--k1)","var(--k2)","var(--k3)","var(--k4)","var(--k5)","var(--k6)"];
+function store(k,v){try{localStorage.setItem("clab-"+k,JSON.stringify(v))}catch(e){}}
+function load(k,d){try{const v=localStorage.getItem("clab-"+k);return v===null?d:JSON.parse(v)}catch(e){return d}}
+
+// ---------------------------------------------------------------- data sets
+const BANKS=[["B Union",0.22,23.7,1],["B Mas Sarda",-2.23,29.1,1],["B Levante",0.18,47.5,1],["B Catalana",0.21,30.6,1],["B Ind Cat",0.21,21.8,1],["B Barcelona",0.08,44.1,1],["B Gerona",0.08,28.4,1],["B Alicante",0.23,30.3,1],["B Cred e Inv",0.14,32.6,1],["B Pirineos",0.57,46.3,1],["B Madrid",0.0,57.9,1],["B de Navarra",0.26,59.7,1],["B Cantábrico",0.24,47.7,1],["B Meridional",-1.35,55.8,1],["B Valladolid",0.53,43.1,1],["B de Cred Comerc",0.04,44.8,1],["B de Prést y Ahorro",-5.37,37.4,1],["B Descuento",0.03,32.4,1],["B Com Occ",0.26,28.4,1],["B Occid",0.29,37.2,1],["B Ind Med",-0.26,22.8,1],["B Cat Desarr",0.0,39.2,1],["B Prom Neg",0.0,21.8,1],["B Lopez Q",-8.22,35.8,1],["B Asturias",0.58,46.1,1],["B Granada",0.36,29.8,1],["B Simeón",0.15,32.5,1],["B de Exp Ind",0.24,25.7,1],["B Garriga Nogués",0.4,41.8,1],["B de Progreso",1.71,23.9,0],["B Ind Bilbao",0.34,33.7,0],["B Interc Esp",0.83,36.0,0],["B Comerc Trans",0.67,46.5,0],["B de Comercio",0.18,30.7,0],["B Jover",0.62,45.6,0],["B de Vitoria",1.21,55.7,0],["B Pueyo",1.24,62.3,0],["B de Créd Balear",0.68,34.5,0],["B Huesca",0.41,31.3,0],["B Fomento",0.7,37.5,0],["B Pastor",0.3,30.6,0],["B de Castilla",1.14,33.6,0],["B Guipuzcoano",0.43,44.0,0],["B de Galicia",0.85,39.3,0],["B Hisp Ind",1.42,22.9,0],["B March",0.76,43.9,0],["B Depositos",2.26,63.1,0],["B Herrero",1.29,46.1,0],["B Sabadell",1.05,50.4,0],["B P y M E",0.96,29.0,0],["B Int de Comer",0.3,22.2,0],["B Zaragozano",0.32,33.5,0],["B Comercial Esp",0.84,47.1,0],["B Merc Tarragona",0.18,39.6,0],["B Abel Matutes",1.84,54.9,0],["B Fin Ind",0.39,31.3,0],["Sind banqueros B",0.51,76.7,0],["B de Europa",0.43,40.7,0],["B de Vasconia",0.32,45.7,0],["B Pop Español",0.74,40.0,0],["B Hisp Amer",0.48,43.2,0],["B Esp Cred",0.63,43.0,0],["B Santander",0.82,39.4,0],["B Central",0.55,45.0,0],["B Bilbao",0.51,36.7,0],["B Vizcaya",0.5,38.5,0]];
+const EXTREME=["B Mas Sarda","B Meridional","B de Prést y Ahorro","B Lopez Q"];
+const CUST=[[18,10],[21,11],[22,22],[24,15],[26,13],[26,12],[27,14],[30,33],[31,39],[35,37],[39,44],[40,27],[41,29],[42,20],[44,28],[46,21],[47,30],[48,31],[49,23],[54,24]];
+
+function makeBlobs(){const r=rng(11),pts=[];[[22,32],[48,70],[72,36]].forEach((c,g)=>{for(let i=0;i<15;i++)pts.push({x:+(c[0]+gauss(r)*6).toFixed(1),y:+(c[1]+gauss(r)*7).toFixed(1),label:"Shopper "+(pts.length+1)})});return pts}
+function makeMoons(){const r=rng(5),pts=[];for(let i=0;i<28;i++){const a=Math.PI*i/27;pts.push({x:+(30+28*Math.cos(a)+gauss(r)*1.6).toFixed(1),y:+(40+28*Math.sin(a)+gauss(r)*1.6).toFixed(1)})}for(let i=0;i<28;i++){const a=Math.PI*i/27;pts.push({x:+(58-28*Math.cos(a)+gauss(r)*1.6).toFixed(1),y:+(52-28*Math.sin(a)+gauss(r)*1.6).toFixed(1)})}pts.forEach((p,i)=>p.label="Point "+(i+1));return pts}
+let customPts=load("custom",null)||[[20,20],[24,26],[28,22],[70,72],[74,66],[78,74],[50,40],[54,46]].map(([x,y],i)=>({x,y,label:"Point "+(i+1)}));
+
+const DATASETS={
+  customers:{name:"Lecture customers (20)",x:"Age (years)",y:"Spending per week (£)",xu:"",yu:"£",
+    pts:()=>CUST.map(([x,y],i)=>({x,y,label:"Customer "+(i+1)})),k:3,std:false,
+    note:"The 20 customers from Figures 1 and 2 in the lecture. Age and spending vary by similar amounts, so standardising makes little difference here."},
+  banks66:{name:"Spanish banks, all 66",x:"Return on assets, R5 (%)",y:"Current assets / total assets, R1 (%)",xu:"%",yu:"%",
+    pts:()=>BANKS.map(b=>({x:b[1],y:b[2],label:b[0],failed:!!b[3]})),k:3,std:true,banks:true,
+    note:"Two of the nine ratios from the case study: profitability across, liquidity up. Four collapsing banks sit far to the left. The failure label is hidden unless you reveal it, and it is never used to build the clusters."},
+  banks62:{name:"Spanish banks, 62 (extreme four set aside)",x:"Return on assets, R5 (%)",y:"Current assets / total assets, R1 (%)",xu:"%",yu:"%",
+    pts:()=>BANKS.filter(b=>!EXTREME.includes(b[0])).map(b=>({x:b[1],y:b[2],label:b[0],failed:!!b[3]})),k:3,std:true,banks:true,
+    note:"The same two ratios with the four collapsing banks (Mas Sardà, Meridional, Préstamos y Ahorro, López Quesada) set aside, as in the case study's second pass."},
+  blobs:{name:"Three groups (shoppers)",x:"Website visits per month",y:"Average basket (£)",xu:"",yu:"£",pts:makeBlobs,k:3,std:false,
+    note:"45 made-up shoppers in three clear groups. A good warm-up: both methods should agree."},
+  moons:{name:"Two crescents",x:"Feature 1",y:"Feature 2",xu:"",yu:"",pts:makeMoons,k:2,std:false,
+    note:"Two curved groups that wrap around each other. k-means looks for round clusters, so watch what happens. Then try single linkage in stage 3."},
+  custom:{name:"Draw your own",x:"Variable 1",y:"Variable 2",xu:"",yu:"",pts:()=>customPts.map(p=>({...p})),k:2,std:false,custom:true,fixedRange:[0,100,0,100],
+    note:"Click on the plot in stage 1 to add points. Your points stay in this browser only."}
+};
+
+// ---------------------------------------------------------------- state
+const S={ds:null,key:"customers",pts:[],std:false,reveal:false,mx:0,my:0,sx:1,sy:1,
+  km:{K:3,C:[],A:null,phase:"empty",iter:0,hist:[],placing:false,timer:null},
+  el:{res:null,sel:3},
+  hc:{link:"complete",merges:[],order:[],s:0,cutK:3,ghost:false}};
+
+function model(p){return S.std?[(p.x-S.mx)/S.sx,(p.y-S.my)/S.sy]:[p.x,p.y]}
+function toRaw(c){return S.std?[c[0]*S.sx+S.mx,c[1]*S.sy+S.my]:[c[0],c[1]]}
+function d2(a,b){const dx=a[0]-b[0],dy=a[1]-b[1];return dx*dx+dy*dy}
+
+function loadDataset(key,keepStd){
+  stopRun();
+  S.key=key;S.ds=DATASETS[key];S.pts=S.ds.pts();
+  if(!keepStd){S.std=S.ds.std;$("standardise").checked=S.std}
+  const n=S.pts.length;S.mx=S.pts.reduce((a,p)=>a+p.x,0)/n;S.my=S.pts.reduce((a,p)=>a+p.y,0)/n;
+  S.sx=Math.sqrt(S.pts.reduce((a,p)=>a+(p.x-S.mx)**2,0)/Math.max(1,n-1))||1;S.sy=Math.sqrt(S.pts.reduce((a,p)=>a+(p.y-S.my)**2,0)/Math.max(1,n-1))||1;
+  S.M=S.pts.map(model);
+  $("revealWrap").hidden=!S.ds.banks;S.reveal=!!S.ds.banks&&$("reveal").checked;
+  $("addHint").hidden=!S.ds.custom;
+  $("dsNote").textContent=S.ds.note;
+  S.km.K=Math.min(S.ds.k,Math.max(1,n));S.km.A=null;S.km.C=[];S.km.phase="empty";S.km.iter=0;S.km.hist=[];setPlacing(false);
+  S.hc.cutK=S.ds.k;
+  computeScales();
+  S.el.res=null;S.el.sel=S.ds.k;
+  buildTree();S.hc.s=Math.max(0,n-S.hc.cutK);
+  if(n>=S.km.K&&!S.ds.custom)randomCentres(true);
+  if(key==="customers"&&S.km.K===3){S.km.C=[[36,12],[20,40],[52,40]].map(([x,y])=>model({x,y}))}  // the lecture's starting centres (slide 22)
+  renderAll();
+}
+function computeScales(){
+  const ds=S.ds;let x0,x1,y0,y1;
+  if(ds.fixedRange){[x0,x1,y0,y1]=ds.fixedRange}else{
+    const xs=S.pts.map(p=>p.x),ys=S.pts.map(p=>p.y);x0=Math.min(...xs);x1=Math.max(...xs);y0=Math.min(...ys);y1=Math.max(...ys);
+    const px=(x1-x0)*.08||1,py=(y1-y0)*.08||1;x0-=px;x1+=px;y0-=py;y1+=py}
+  S.range=[x0,x1,y0,y1];
+}
+
+// ---------------------------------------------------------------- scatter renderer
+const W=640,H=440,ML=58,MR=18,MT=16,MB=50;
+function sxp(x){const[x0,x1]=S.range;return ML+(x-x0)/(x1-x0)*(W-ML-MR)}
+function syp(y){const[,,y0,y1]=S.range;return H-MB-(y-y0)/(y1-y0)*(H-MT-MB)}
+function pxToData(svg,evt){const pt=svg.createSVGPoint();pt.x=evt.clientX;pt.y=evt.clientY;const p=pt.matrixTransform(svg.getScreenCTM().inverse());const[x0,x1,y0,y1]=S.range;return{x:x0+(p.x-ML)/(W-ML-MR)*(x1-x0),y:y0+(H-MB-p.y)/(H-MT-MB)*(y1-y0),inside:p.x>=ML&&p.x<=W-MR&&p.y>=MT&&p.y<=H-MB}}
+
+function drawAxes(svg){
+  svg.innerHTML="";
+  el("rect",{x:0,y:0,width:W,height:H,fill:"transparent"},svg);
+  const[x0,x1,y0,y1]=S.range;const g=el("g",{class:"grid"},svg);
+  niceTicks(x0,x1,6).forEach(t=>{const X=sxp(t);el("line",{x1:X,x2:X,y1:MT,y2:H-MB},g);const tx=el("text",{x:X,y:H-MB+18,"text-anchor":"middle",class:"tick"},svg);tx.textContent=t});
+  niceTicks(y0,y1,6).forEach(t=>{const Y=syp(t);el("line",{x1:ML,x2:W-MR,y1:Y,y2:Y},g);const ty=el("text",{x:ML-8,y:Y+4,"text-anchor":"end",class:"tick"},svg);ty.textContent=t});
+  el("line",{x1:ML,x2:W-MR,y1:H-MB,y2:H-MB,stroke:"var(--muted)","stroke-width":1},svg);
+  el("line",{x1:ML,x2:ML,y1:MT,y2:H-MB,stroke:"var(--muted)","stroke-width":1},svg);
+  const xl=el("text",{x:(ML+W-MR)/2,y:H-10,"text-anchor":"middle",class:"axlabel"},svg);xl.textContent=S.ds.x;
+  const yl=el("text",{x:-(MT+H-MB)/2,y:16,"text-anchor":"middle",transform:"rotate(-90)",class:"axlabel"},svg);yl.textContent=S.ds.y;
+}
+function drawPoint(svg,p,col,i){
+  const X=sxp(p.x),Y=syp(p.y);let m;
+  if(S.reveal&&p.failed){const s=5.5;m=el("path",{d:`M${X-s} ${Y-s}L${X+s} ${Y+s}M${X-s} ${Y+s}L${X+s} ${Y-s}`,stroke:col,"stroke-width":3,"stroke-linecap":"round",fill:"none"},svg)}
+  else m=el("circle",{cx:X,cy:Y,r:5.5,fill:col,stroke:"var(--bg)","stroke-width":1.2},svg);
+  const t=el("title",{},m);t.textContent=`${p.label}: ${S.ds.x} ${p.x}, ${S.ds.y} ${p.y}`+(S.reveal&&p.failed!==undefined?(p.failed?" (failed)":" (survived)"):"");
+  return m;
+}
+function drawCentre(svg,c,col,label){
+  const[rx,ry]=toRaw(c);const X=sxp(rx),Y=syp(ry);const r=11,pts=[];for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,rr=i%2?r*.45:r;pts.push((X+rr*Math.cos(a)).toFixed(1)+","+(Y+rr*Math.sin(a)).toFixed(1))}
+  const s=el("polygon",{points:pts.join(" "),fill:col,stroke:"var(--bg)","stroke-width":1.5},svg);el("title",{},s).textContent=label;
+}
+
+// ---------------------------------------------------------------- k-means
+function assign(M,C){return M.map(p=>{let b=0,bd=Infinity;C.forEach((c,j)=>{const d=d2(p,c);if(d<bd){bd=d;b=j}});return b})}
+function centres(M,A,C){return C.map((c,j)=>{let sx=0,sy=0,n=0;M.forEach((p,i)=>{if(A[i]===j){sx+=p[0];sy+=p[1];n++}});return n?[sx/n,sy/n]:c})}
+function wcv(M,A,C){return M.reduce((s,p,i)=>s+d2(p,C[A[i]]),0)}
+function kmeansFull(M,K,r){const idx=[...M.keys()];for(let i=idx.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
+  let C=idx.slice(0,K).map(i=>M[i].slice()),A=assign(M,C);for(let it=0;it<100;it++){C=centres(M,A,C);const B=assign(M,C);if(B.every((v,i)=>v===A[i])){A=B;break}A=B}C=centres(M,A,C);return{A,C,W:wcv(M,A,C)}}
+
+function randomCentres(silent){
+  stopRun();const k=S.km;const n=S.M.length;if(n<k.K){narr("km",`You need at least ${k.K} points. Add more points or lower K.`);return}
+  const r=rng(Math.floor(Math.random()*1e9));const idx=[...Array(n).keys()];for(let i=n-1;i>0;i--){const j=Math.floor(r()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
+  k.C=idx.slice(0,k.K).map(i=>[...S.M[i]].map((v,d)=>v+(r()-.5)*.15*(d?(S.std?1:S.sy):(S.std?1:S.sx))));
+  k.A=null;k.phase="init";k.iter=0;k.hist=[];setPlacing(false);
+  if(!silent)renderKM();
+}
+function kmStep(){
+  const k=S.km;if(k.phase==="empty"||k.phase==="placing"){narr("km","Place the starting centres first: press Random centres, or click to place them.");return false}
+  if(k.phase==="done")return false;
+  if(k.phase==="init"||k.phase==="updated"){
+    const B=assign(S.M,k.C);const changed=!k.A||B.some((v,i)=>v!==k.A[i]);
+    if(k.phase==="updated"&&!changed){k.phase="done";renderKM();return false}
+    k.A=B;k.iter++;k.phase="assigned";k.hist.push(wcv(S.M,k.A,k.C));
+  } else if(k.phase==="assigned"){
+    k.C=centres(S.M,k.A,k.C);k.phase="updated";k.hist.push(wcv(S.M,k.A,k.C));
+  }
+  renderKM();return true;
+}
+function stopRun(){if(S.km.timer){clearInterval(S.km.timer);S.km.timer=null;$("kmRun").textContent="Run to the end"}}
+function runKM(){if(S.km.timer){stopRun();return}if(S.km.phase==="done")return;
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce){let g=0;while(kmStep()&&g++<500);return}
+  $("kmRun").textContent="Pause";S.km.timer=setInterval(()=>{if(!kmStep())stopRun()},650)}
+function setPlacing(on){S.km.placing=on;$("kmPlace").setAttribute("aria-pressed",on?"true":"false");if(on){stopRun();S.km.C=[];S.km.A=null;S.km.phase="placing";S.km.iter=0;S.km.hist=[]}}
+
+function narr(which,html){$(which+"Narr").innerHTML=html}
+function phaseText(){const k=S.km;return{empty:"Ready",placing:"Placing",init:"Centres placed",assigned:"Assigned",updated:"Updated",done:"Converged"}[k.phase]}
+function renderKM(){
+  const svg=$("kmPlot");drawAxes(svg);const k=S.km;
+  if(k.A&&$("kmLines").checked){S.pts.forEach((p,i)=>{const[cx,cy]=toRaw(k.C[k.A[i]]);el("line",{x1:sxp(p.x),y1:syp(p.y),x2:sxp(cx),y2:syp(cy),stroke:CL[k.A[i]%6],"stroke-width":1,opacity:.45},svg)})}
+  S.pts.forEach((p,i)=>drawPoint(svg,p,k.A?CL[k.A[i]%6]:"var(--none)",i));
+  k.C.forEach((c,j)=>drawCentre(svg,c,CL[j%6],"Centre "+(j+1)));
+  if(k.phase==="placing"){const t=el("text",{x:W-MR-8,y:MT+18,"text-anchor":"end",class:"axlabel"},svg);t.textContent=`Click to place centre ${k.C.length+1} of ${k.K}`}
+  $("kVal").textContent=k.K;$("kmIter").textContent=k.iter;
+  const w=k.hist.length?k.hist[k.hist.length-1]:(k.C.length===k.K&&k.C.length?wcv(S.M,assign(S.M,k.C),k.C):NaN);
+  $("kmW").textContent=fmt(w);
+  const ph=$("kmPhase");ph.textContent=phaseText();ph.className="pill"+(k.phase==="done"?" done":"");
+  $("kmStep").disabled=k.phase==="done";$("kmRun").disabled=k.phase==="done"&&!k.timer;
+  // legend
+  const lg=$("kmLegend");lg.innerHTML="";
+  if(k.A)for(let j=0;j<k.K;j++){const n=k.A.filter(a=>a===j).length;lg.insertAdjacentHTML("beforeend",`<span><i class="sw" style="background:${CL[j%6]}"></i>Cluster ${j+1} (${n})</span>`)}
+  lg.insertAdjacentHTML("beforeend",`<span>★ centre</span>`);
+  if(S.reveal)lg.insertAdjacentHTML("beforeend",`<span>× failed bank · ● survived</span>`);
+  // narration
+  const unit=S.std?" (in standardised units)":"";
+  const m={empty:S.ds.custom&&S.pts.length<k.K?`Click on the plot to add some points, then press <b>Random centres</b>.`:`Choose K, then press <b>Random centres</b> or <b>Place centres by clicking</b>.`,
+    placing:`Click on the plot to place ${k.K} starting centres.`,
+    init:`${k.K} starting centres are in place. Press <b>Next step</b> to assign every point to its nearest centre.`,
+    assigned:`Assign: every point now belongs to its nearest centre. Within-cluster variation is ${fmt(w)}${unit}. Next, each centre moves to the average of its points.`,
+    updated:`Update: each centre moved to the middle of its points, and the variation fell to ${fmt(w)}. Next, some points may switch to a closer centre.`,
+    done:`Converged after ${k.iter} iteration${k.iter===1?"":"s"}: no point changed cluster, so the centres stay put. Final within-cluster variation: ${fmt(w)}${unit}. Try other random starts: do you get the same answer?`};
+  narr("km",m[k.phase]);
+  drawHist();renderProfile("km",k.A,k.K);
+}
+function drawHist(){
+  const svg=$("kmHist");svg.innerHTML="";const h=S.km.hist;const w=320,hh=90,l=8,r=8,t=10,b=18;
+  el("line",{x1:l,x2:w-r,y1:hh-b,y2:hh-b,stroke:"var(--line)"},svg);
+  if(!h.length){const tx=el("text",{x:w/2,y:hh/2,"text-anchor":"middle",class:"tick"},svg);tx.textContent="Variation after each step appears here";return}
+  const mx=Math.max(...h),n=Math.max(h.length,6);const X=i=>l+i*(w-l-r)/(n-1),Y=v=>hh-b-(v/mx)*(hh-t-b);
+  el("polyline",{points:h.map((v,i)=>X(i)+","+Y(v)).join(" "),fill:"none",stroke:"var(--accent)","stroke-width":2},svg);
+  h.forEach((v,i)=>el("circle",{cx:X(i),cy:Y(v),r:3,fill:i===h.length-1?"var(--accent)":"var(--bg)",stroke:"var(--accent)","stroke-width":1.5},svg));
+  const tx=el("text",{x:l,y:hh-3,class:"tick"},svg);tx.textContent="steps →";
+}
+function renderProfile(which,A,K){
+  const card=$(which+"ProfCard"),tb=$(which+"Prof");
+  if(!A||K>6){card.hidden=true;return}card.hidden=false;
+  const rows=[];for(let j=0;j<K;j++){const ids=A.map((a,i)=>a===j?i:-1).filter(i=>i>=0);if(!ids.length)continue;
+    const mx=ids.reduce((s,i)=>s+S.pts[i].x,0)/ids.length,my=ids.reduce((s,i)=>s+S.pts[i].y,0)/ids.length;
+    const f=ids.filter(i=>S.pts[i].failed).length;rows.push({j,n:ids.length,mx,my,f})}
+  const shortX=S.ds.banks?"Avg return on assets":"Avg "+S.ds.x.replace(/ \(.*\)/,"").toLowerCase(),shortY=S.ds.banks?"Avg liquidity":"Avg "+S.ds.y.replace(/ \(.*\)/,"").toLowerCase();
+  let html=`<tr><th>Cluster</th><th>Size</th><th>${shortX}</th><th>${shortY}</th>${S.reveal?"<th>Failed</th>":""}</tr>`;
+  rows.forEach(r=>{html+=`<tr><td><i class="sw" style="background:${CL[r.j%6]};margin-right:6px"></i>${r.j+1}</td><td>${r.n}</td><td>${r.mx.toFixed(S.ds.banks?2:1)}${S.ds.xu}</td><td>${r.my.toFixed(1)}${S.ds.yu==="£"?"":S.ds.yu}</td>${S.reveal?`<td>${r.f} (${Math.round(100*r.f/r.n)}%)</td>`:""}</tr>`});
+  tb.innerHTML=html;
+}
+
+// ---------------------------------------------------------------- elbow
+function computeElbow(){
+  const res=[];const n=S.M.length;
+  for(let K=1;K<=Math.min(8,n);K++){let best=null;const r=rng(1000+K);for(let s=0;s<20;s++){const o=kmeansFull(S.M,K,r);if(!best||o.W<best.W)best=o}res.push({K,...best})}
+  S.el.res=res;
+}
+function renderElbow(){
+  if(!S.el.res)computeElbow();const res=S.el.res;const svg=$("elbowPlot");svg.innerHTML="";
+  if(!res.length){return}
+  const w=640,h=400,l=70,r=20,t=20,b=56;const mx=Math.max(...res.map(o=>o.W))||1;const kmax=res.length;
+  const X=K=>l+(K-1)*(w-l-r)/Math.max(1,kmax-1),Y=v=>h-b-v/mx*(h-t-b);
+  const g=el("g",{class:"grid"},svg);niceTicks(0,mx,5).forEach(v=>{el("line",{x1:l,x2:w-r,y1:Y(v),y2:Y(v)},g);const tx=el("text",{x:l-8,y:Y(v)+4,"text-anchor":"end",class:"tick"},svg);tx.textContent=fmt(v)});
+  res.forEach(o=>{const tx=el("text",{x:X(o.K),y:h-b+20,"text-anchor":"middle",class:"tick"},svg);tx.textContent=o.K});
+  el("line",{x1:l,x2:w-r,y1:h-b,y2:h-b,stroke:"var(--muted)"},svg);
+  const xl=el("text",{x:(l+w-r)/2,y:h-12,"text-anchor":"middle",class:"axlabel"},svg);xl.textContent="Number of clusters, K";
+  const yl=el("text",{x:-(t+h-b)/2,y:18,"text-anchor":"middle",transform:"rotate(-90)",class:"axlabel"},svg);yl.textContent="Total within-cluster variation"+(S.std?" (standardised)":"");
+  el("polyline",{points:res.map(o=>X(o.K)+","+Y(o.W)).join(" "),fill:"none",stroke:"var(--k1)","stroke-width":2.5},svg);
+  res.forEach(o=>{const sel=o.K===S.el.sel;const c=el("circle",{cx:X(o.K),cy:Y(o.W),r:sel?10:7,fill:sel?"var(--accent)":"var(--bg)",stroke:sel?"var(--accent)":"var(--k1)","stroke-width":2.5,tabindex:0,role:"button","aria-label":`K = ${o.K}, variation ${fmt(o.W)}`,style:"cursor:pointer"},svg);
+    el("title",{},c).textContent=`K = ${o.K}: ${fmt(o.W)}`;
+    const last=o.K===res.length;const lab=el("text",{x:X(o.K)+(last?-10:10),y:Y(o.W)-12,class:"tick","text-anchor":last?"end":"start"},svg);lab.textContent=fmt(o.W);
+    const pick=()=>{S.el.sel=o.K;renderElbow()};c.addEventListener("click",pick);c.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick()}})});
+  // table
+  let html="<tr><th>K</th><th>Variation</th><th>Drop from K − 1</th></tr>";res.forEach((o,i)=>{html+=`<tr${o.K===S.el.sel?' style="font-weight:700"':""}><td>${o.K}</td><td>${fmt(o.W)}</td><td>${i?Math.round(100*(o.W-res[i-1].W)/res[i-1].W)+"%":"–"}</td></tr>`});$("elbowTable").innerHTML=html;
+  // mini
+  const o=res.find(r=>r.K===S.el.sel)||res[0];$("elbowTitle").textContent=`Best solution for K = ${o.K}`;
+  const mini=$("elbowMini");drawAxes(mini);S.pts.forEach((p,i)=>drawPoint(mini,p,CL[o.A[i]%6],i));o.C.forEach((c,j)=>drawCentre(mini,c,CL[j%6],"Centre "+(j+1)));
+}
+
+// ---------------------------------------------------------------- hierarchical
+function buildTree(){
+  const M=S.M,n=M.length,link=S.hc.link;S.hc.s=0;S.hc.merges=[];S.hc.order=[];if(n<2)return;
+  let clusters=M.map((p,i)=>({id:i,members:[i],c:p.slice()}));const D=M.map(a=>M.map(b=>Math.sqrt(d2(a,b))));
+  function dist(A,B){if(link==="ward"){const na=A.members.length,nb=B.members.length;return Math.sqrt(2*na*nb/(na+nb)*d2(A.c,B.c))}
+    let mn=Infinity,mx=0,sm=0;for(const i of A.members)for(const j of B.members){const d=D[i][j];if(d<mn)mn=d;if(d>mx)mx=d;sm+=d}
+    return link==="single"?mn:link==="complete"?mx:sm/(A.members.length*B.members.length)}
+  let next=n;
+  while(clusters.length>1){let best=null;for(let a=0;a<clusters.length;a++)for(let b=a+1;b<clusters.length;b++){const d=dist(clusters[a],clusters[b]);if(!best||d<best.d-1e-12)best={a,b,d}}
+    const A=clusters[best.a],B=clusters[best.b];const mem=A.members.concat(B.members);const c=[(A.c[0]*A.members.length+B.c[0]*B.members.length)/mem.length,(A.c[1]*A.members.length+B.c[1]*B.members.length)/mem.length];
+    S.hc.merges.push({a:A.id,b:B.id,h:best.d,members:mem,id:next});
+    clusters=clusters.filter((_,i)=>i!==best.a&&i!==best.b);clusters.push({id:next++,members:mem,c})}
+  // leaf order by DFS
+  const kids={};S.hc.merges.forEach(m=>kids[m.id]=[m.a,m.b]);const order=[];(function walk(id){if(id<n)order.push(id);else{walk(kids[id][0]);walk(kids[id][1])}})(next-1);S.hc.order=order;
+}
+function clustersAt(s){const n=S.M.length;const par=[...Array(n).keys()];const find=x=>par[x]===x?x:(par[x]=find(par[x]));
+  const nodeLeaf={};for(let i=0;i<n;i++)nodeLeaf[i]=i;for(let k=0;k<s;k++){const m=S.hc.merges[k];const ra=find(nodeLeaf[m.a]),rb=find(nodeLeaf[m.b]);par[rb]=ra;nodeLeaf[m.id]=ra}
+  const roots={};const lab=[];for(let i=0;i<n;i++){const r=find(i);(roots[r]=roots[r]||[]).push(i)}
+  const groups=Object.values(roots).sort((a,b)=>b.length-a.length||Math.min(...a)-Math.min(...b));
+  const A=new Array(n);groups.forEach((g,j)=>g.forEach(i=>A[i]=j));return{A,groups,nodeLeaf,find}}
+function colourFor(j,groups){const total=groups.length;if(total<=6)return CL[j];return groups[j].length>1&&j<6?CL[j]:"var(--none)"}
+function renderHC(){
+  const n=S.M.length,hc=S.hc,s=hc.s;const svg=$("hcPlot");drawAxes(svg);
+  if(n<2){narr("hc","Add at least two points to build a tree.");$("hcDendro").innerHTML="";return}
+  const{A,groups}=clustersAt(s);
+  // highlight last merge
+  if(s>0){const m=hc.merges[s-1];const xs=m.members.map(i=>sxp(S.pts[i].x)),ys=m.members.map(i=>syp(S.pts[i].y));const cx=xs.reduce((a,b)=>a+b)/xs.length,cy=ys.reduce((a,b)=>a+b)/ys.length;
+    const r=Math.max(12,...xs.map((x,i)=>Math.hypot(x-cx,ys[i]-cy)))+10;
+    if(m.members.length<=8&&r<120)el("circle",{cx,cy,r,fill:"none",stroke:"var(--accent)","stroke-width":2,"stroke-dasharray":"5 4"},svg);
+    else xs.forEach((x,i)=>el("circle",{cx:x,cy:ys[i],r:9,fill:"none",stroke:"var(--accent)","stroke-width":1.5},svg))}
+  S.pts.forEach((p,i)=>drawPoint(svg,p,colourFor(A[i],groups),i));
+  // numbers for small n
+  if(n<=25)S.pts.forEach((p,i)=>{const t=el("text",{x:sxp(p.x)+7,y:syp(p.y)-6,class:"tick",style:"font-size:10px"},svg);t.textContent=i+1});
+  drawDendro(A,groups);
+  $("hcMerges").textContent=`${s} / ${n-1}`;$("hcClusters").textContent=n-s;$("hcHeight").textContent=s?fmt(hc.merges[s-1].h):"–";$("cutVal").textContent=hc.cutK;
+  $("hcBack").disabled=s===0;$("hcNext").disabled=s>=n-1;
+  const linkTxt={complete:"furthest members",single:"closest members",average:"average distance between all pairs",ward:"smallest rise in within-cluster variation"}[hc.link];
+  let msg;
+  if(s===0)msg=`Every point is its own cluster (${n} clusters). Press <b>Next merge</b> to join the two closest. Linkage: ${linkTxt}.`;
+  else{const m=hc.merges[s-1];const sa=m.a<n?(n<=25?"point "+(m.a+1):S.pts[m.a].label):`a cluster of ${countLeaves(m.a)}`,sb=m.b<n?(n<=25?"point "+(m.b+1):S.pts[m.b].label):`a cluster of ${countLeaves(m.b)}`;
+    msg=s>=n-1?`Done: the last merge joined everything at height ${fmt(m.h)}. Use <b>Cut the tree</b> to choose how many clusters to keep.`:`Merge ${s}: joined ${sa} and ${sb} at height ${fmt(m.h)} (circled in red). ${n-s} clusters remain.`}
+  narr("hc",msg);
+  renderProfile("hc",n-s<=6?A:null,n-s);
+}
+function countLeaves(id){const n=S.M.length;if(id<n)return 1;const m=S.hc.merges.find(x=>x.id===id);return m.members.length}
+function drawDendro(A,groups){
+  const svg=$("hcDendro");svg.innerHTML="";const n=S.M.length,hc=S.hc,s=hc.s;const w=640,h=300,l=50,r=14,t=14,b=n<=25?26:16;
+  const maxH=hc.merges[n-2].h||1;const pos={};hc.order.forEach((leaf,i)=>pos[leaf]=l+(i+.5)*(w-l-r)/n);const Y=v=>h-b-v/maxH*(h-t-b);
+  const g=el("g",{class:"grid"},svg);niceTicks(0,maxH,4).forEach(v=>{el("line",{x1:l,x2:w-r,y1:Y(v),y2:Y(v)},g);const tx=el("text",{x:l-6,y:Y(v)+4,"text-anchor":"end",class:"tick"},svg);tx.textContent=fmt(v)});
+  const yl=el("text",{x:-(t+h-b)/2,y:14,"text-anchor":"middle",transform:"rotate(-90)",class:"axlabel",style:"font-size:12px"},svg);yl.textContent="Height (distance)";
+  const top={};for(let i=0;i<n;i++)top[i]={x:pos[i],y:Y(0)};
+  const {find,nodeLeaf}=clustersAt(s);
+  hc.merges.forEach((m,k)=>{const a=top[m.a],b=top[m.b];const y=Y(m.h);const done=k<s;
+    if(done||hc.ghost){const col=done?colourFor(A[m.members[0]],groups):"var(--line)";
+      el("path",{d:`M${a.x} ${a.y}V${y}H${b.x}V${b.y}`,fill:"none",stroke:col==="var(--none)"&&done?"var(--muted)":col,"stroke-width":done?2:1.2,"stroke-dasharray":done?"":"3 3"},svg)}
+    top[m.id]={x:(a.x+b.x)/2,y}});
+  // leaves
+  hc.order.forEach(i=>{const p=S.pts[i];const X=pos[i];
+    if(S.reveal&&p.failed)el("path",{d:`M${X-3} ${h-b+4}L${X+3} ${h-b+10}M${X-3} ${h-b+10}L${X+3} ${h-b+4}`,stroke:"var(--bad)","stroke-width":2},svg);
+    else el("circle",{cx:X,cy:h-b+6,r:2.2,fill:colourFor(A[i],groups)},svg);
+    if(n<=25){const tx=el("text",{x:X,y:h-4,"text-anchor":"middle",class:"tick",style:"font-size:10px"},svg);tx.textContent=i+1}});
+  // cut line
+  if(s>0&&s<n-1){const yc=Y((hc.merges[s-1].h+hc.merges[s].h)/2);el("line",{x1:l,x2:w-r,y1:yc,y2:yc,stroke:"var(--accent)","stroke-width":1.5,"stroke-dasharray":"6 4"},svg);
+    const tx=el("text",{x:w-r-4,y:yc-5,"text-anchor":"end",class:"tick",style:"fill:var(--accent-ink)"},svg);tx.textContent=`cut here → ${n-s} clusters`}
+}
+
+// ---------------------------------------------------------------- quiz
+const QUIZ=[
+ {q:"What must you decide before running k-means?",o:["The number of clusters, K","Which points belong to which cluster","The height at which to cut the tree","Which banks failed"],a:0,e:"k-means needs K up front. Hierarchical clustering lets you choose the number of clusters afterwards by cutting the tree."},
+ {q:"In the update step of k-means, each centre moves to…",o:["the point nearest to it","the average position of the points assigned to it","a new random position","the middle of the whole data set"],a:1,e:"Update = move each centre to the average (the middle) of its own points. Assign = each point joins its nearest centre."},
+ {q:"As K increases, the best total within-cluster variation…",o:["always rises","always falls or stays the same","falls, then rises after the elbow","does not change"],a:1,e:"More clusters can never make the fit worse. With one cluster per point it would be zero. That is why we look for an elbow rather than the lowest value."},
+ {q:"Two random starts of k-means give different final clusters. What is the sensible response?",o:["The data must be wrong","Use whichever looks nicer","Run many starts and keep the one with the lowest within-cluster variation","Switch to supervised learning"],a:2,e:"k-means can settle in a stable but poor layout. Software runs many starts and keeps the best one."},
+ {q:"In a dendrogram, how do you judge how similar two observations are?",o:["How close their leaves sit left to right","The height at which their branches join","The colour of their leaves","The number of leaves between them"],a:1,e:"The lower the join, the more similar. Neighbouring leaves can still join very high up."},
+ {q:"For the Spanish banks, return on assets ranges over about 10 percentage points and liquidity over about 55. Why standardise?",o:["To make the plot prettier","So liquidity does not dominate the distances just because its numbers are bigger","Because k-means only works with negative numbers","To hide which banks failed"],a:1,e:"Distances add up raw differences. Without standardising, the variable with the bigger spread decides almost everything."},
+ {q:"On the Two crescents data, which method is most likely to recover the two curved shapes?",o:["k-means with K = 2","Hierarchical clustering with single linkage","Hierarchical clustering with Ward linkage","k-means with K = 8"],a:1,e:"k-means and Ward look for compact, round groups. Single linkage chains neighbouring points together, so it can follow a curve."}
+];
+let answered={};
+function renderQuiz(){const box=$("quiz");box.innerHTML="";QUIZ.forEach((item,qi)=>{const d=document.createElement("div");d.className="q";d.innerHTML=`<h3>${qi+1}. ${item.q}</h3><div class="opts"></div><div class="fb" aria-live="polite"></div>`;
+  const opts=d.querySelector(".opts");item.o.forEach((t,oi)=>{const b=document.createElement("button");b.className="opt";b.textContent=t;b.id=`q${qi}o${oi}`;
+    b.addEventListener("click",()=>{if(answered[qi]!==undefined)return;answered[qi]=oi;b.classList.add(oi===item.a?"right":"wrong");opts.children[item.a].classList.add("right");
+      d.querySelector(".fb").innerHTML=(oi===item.a?"<b>Correct.</b> ":"<b>Not quite.</b> ")+item.e;updateScore()});opts.appendChild(b)});box.appendChild(d)});updateScore()}
+function updateScore(){const s=Object.entries(answered).filter(([q,o])=>QUIZ[q].a===o).length;$("quizScore").textContent=`${s} / ${QUIZ.length}`}
+
+// ---------------------------------------------------------------- wiring
+function renderAll(){renderKM();renderHC();if(!$("p-elbow").hidden)renderElbow()}
+const sel=$("dataset");Object.entries(DATASETS).forEach(([k,d])=>{const o=document.createElement("option");o.value=k;o.textContent=d.name;sel.appendChild(o)});
+sel.addEventListener("change",()=>{loadDataset(sel.value);store("ds",sel.value)});
+$("standardise").addEventListener("change",e=>{S.std=e.target.checked;const keepK=S.km.K;loadDataset(S.key,true);S.km.K=keepK;randomCentres(true);renderAll()});
+$("reveal").addEventListener("change",e=>{S.reveal=e.target.checked&&!!S.ds.banks;renderAll()});
+$("kUp").addEventListener("click",()=>{S.km.K=Math.min(6,S.km.K+1);randomCentres()});
+$("kDown").addEventListener("click",()=>{S.km.K=Math.max(1,S.km.K-1);randomCentres()});
+$("kmRandom").addEventListener("click",()=>randomCentres());
+$("kmPlace").addEventListener("click",()=>{setPlacing(!S.km.placing);if(!S.km.placing&&S.km.C.length<S.km.K){S.km.phase="empty";S.km.C=[]}renderKM()});
+$("kmStep").addEventListener("click",()=>{stopRun();kmStep()});
+$("kmRun").addEventListener("click",runKM);
+$("kmReset").addEventListener("click",()=>{stopRun();S.km.A=null;S.km.C=[];S.km.phase="empty";S.km.iter=0;S.km.hist=[];setPlacing(false);renderKM()});
+$("kmLines").addEventListener("change",renderKM);
+$("kmPlot").addEventListener("click",e=>{const p=pxToData($("kmPlot"),e);if(!p.inside)return;
+  if(S.km.placing){S.km.C.push(model({x:p.x,y:p.y}));if(S.km.C.length>=S.km.K){S.km.placing=false;$("kmPlace").setAttribute("aria-pressed","false");S.km.phase="init"}renderKM();return}
+  if(S.ds.custom){customPts.push({x:+p.x.toFixed(1),y:+p.y.toFixed(1),label:"Point "+(customPts.length+1)});store("custom",customPts);const K=S.km.K;loadDataset("custom",true);S.km.K=Math.min(K,S.pts.length);if(S.pts.length>=S.km.K)randomCentres(true);renderAll()}});
+$("clearPts").addEventListener("click",()=>{customPts=[];store("custom",customPts);loadDataset("custom",true)});
+$("elbowOpen").addEventListener("click",()=>{const o=S.el.res.find(r=>r.K===S.el.sel);stopRun();S.km.K=o.K;S.km.C=o.C.map(c=>c.slice());S.km.A=o.A.slice();S.km.phase="done";S.km.iter=0;S.km.hist=[o.W];showTab("km")});
+$("linkage").addEventListener("change",e=>{S.hc.link=e.target.value;const s=S.hc.s;buildTree();S.hc.s=s;renderHC()});
+$("hcNext").addEventListener("click",()=>{S.hc.s=Math.min(S.M.length-1,S.hc.s+1);renderHC()});
+$("hcBack").addEventListener("click",()=>{S.hc.s=Math.max(0,S.hc.s-1);renderHC()});
+$("hcAll").addEventListener("click",()=>{S.hc.s=S.M.length-1;renderHC()});
+$("hcReset").addEventListener("click",()=>{S.hc.s=0;renderHC()});
+function cut(k){const n=S.M.length;S.hc.cutK=Math.max(1,Math.min(Math.min(10,n),k));S.hc.s=n-S.hc.cutK;renderHC()}
+$("cutUp").addEventListener("click",()=>cut(S.hc.cutK+1));$("cutDown").addEventListener("click",()=>cut(S.hc.cutK-1));
+$("ghost").addEventListener("change",e=>{S.hc.ghost=e.target.checked;renderHC()});
+$("quizReset").addEventListener("click",()=>{answered={};renderQuiz()});
+
+const TABS=["km","elbow","hc","quiz"];
+function showTab(t){TABS.forEach(x=>{$("tab-"+x).setAttribute("aria-selected",x===t?"true":"false");$("p-"+x).hidden=x!==t});
+  if(t==="elbow")renderElbow();if(t==="km")renderKM();if(t==="hc")renderHC();store("tab",t);
+  try{history.replaceState(null,"","#"+t)}catch(e){}}
+TABS.forEach(t=>$("tab-"+t).addEventListener("click",()=>showTab(t)));
+$("p-km").parentElement.querySelector(".tabs").addEventListener("keydown",e=>{const i=TABS.findIndex(t=>$("tab-"+t).getAttribute("aria-selected")==="true");if(e.key==="ArrowRight"){showTab(TABS[(i+1)%4]);$("tab-"+TABS[(i+1)%4]).focus()}if(e.key==="ArrowLeft"){showTab(TABS[(i+3)%4]);$("tab-"+TABS[(i+3)%4]).focus()}});
+
+// task checkboxes (remembered in this browser only)
+document.querySelectorAll(".tasks input").forEach(cb=>{cb.checked=!!load("task-"+cb.id,false);cb.addEventListener("change",()=>store("task-"+cb.id,cb.checked))});
+
+const startDs=load("ds","customers");sel.value=DATASETS[startDs]?startDs:"customers";
+loadDataset(sel.value);
+// hierarchical opens with the tree already cut into the default number of clusters
+S.hc.s=Math.max(0,S.M.length-S.hc.cutK);renderAll();
+renderQuiz();
+const h=(location.hash||"").replace("#","");showTab(TABS.includes(h)?h:load("tab","km"));
+})();
+</script>
+
+</body>
+</html>
